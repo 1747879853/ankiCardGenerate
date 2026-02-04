@@ -1,0 +1,23 @@
+{
+  "name": "anki-cn2en-active-vocab",
+  "version": "1.0.0",
+  "description": "生成「看中文→拼英文+自检+发音+例句」Anki 卡片",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "gen": "tsx src/cli.ts gen",
+    "apkg": "tsx src/cli.ts apkg"
+  },
+  "dependencies": {
+    "csv-parse": "^5.5.3",
+    "better-sqlite3": "^9.4.3",
+    "archiver": "^6.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/archiver": "^6.0.2",
+    "typescript": "^5.3.3",
+    "tsx": "^4.7.0"
+  }
+}
