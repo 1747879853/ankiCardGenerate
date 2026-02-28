@@ -19,9 +19,13 @@
 npm install
 ```
 
-### 2. 准备词汇 CSV
+### 2. 准备词汇
 
-创建 `input.csv` 文件，至少包含 `CN`（中文）和 `EN`（英文）两列：
+支持两种输入格式：
+
+**方式 A：CSV 文件**
+
+创建 `input.csv`，至少包含 `CN`（中文）和 `EN`（英文）两列：
 
 ```csv
 CN,EN,IPA,POS,ExampleEN,ExampleCN,Hint
@@ -29,12 +33,29 @@ CN,EN,IPA,POS,ExampleEN,ExampleCN,Hint
 完成,accomplish,/əˈkɑːmplɪʃ/,v.,She accomplished her goal.,她完成了目标。,ac(加强)+com(一起)+plish(完成)
 ```
 
+**方式 B：XLSX 词汇表（推荐）**
+
+支持「单词 | 释义 | 例句」三列表格格式的 Excel 文件，例如：
+
+| 单词 | 释义 | 例句 |
+|------|------|------|
+| apartment [ə'pɑːrtmənt] | n. 单元住宅;公寓住宅 | rent an apartment 租一间公寓 |
+| faddism ['fædɪzəm] | n. 追随时尚;赶时髦 | Faddism helps... 人们追随时尚... |
+
+**方式 C：PDF 词汇表**
+
+与 XLSX 格式相同，支持「单词 | 释义 | 例句」三列表格格式的 PDF。
+
 ### 3. 生成卡片
 
 **方式一：生成 TSV（需手动导入）**
 
 ```bash
 npm run gen -- --in input.csv --out output.tsv --tts youdao
+# 或使用 XLSX（推荐）
+npm run gen -- --in input.xlsx --out output.tsv --tts youdao
+# 或使用 PDF
+npm run gen -- --in input.pdf --out output.tsv --tts youdao
 ```
 
 然后在 Anki 中：
@@ -47,6 +68,10 @@ npm run gen -- --in input.csv --out output.tsv --tts youdao
 
 ```bash
 npm run apkg -- --in input.csv --out vocab.apkg --deck "我的词汇" --tts youdao
+# 或使用 XLSX（推荐）
+npm run apkg -- --in input.xlsx --out vocab.apkg --deck "我的词汇" --tts youdao
+# 或使用 PDF
+npm run apkg -- --in input.pdf --out vocab.apkg --deck "我的词汇" --tts youdao
 ```
 
 双击生成的 `vocab.apkg` 即可导入 Anki。
@@ -55,7 +80,7 @@ npm run apkg -- --in input.csv --out vocab.apkg --deck "我的词汇" --tts youd
 
 ```
 选项：
-  --in <file>          输入 CSV 文件路径（必需）
+  --in <file>          输入文件路径（CSV/TSV、XLSX 或 PDF，必需）
   --out <file>         输出文件路径（必需）
   --deck <name>        牌组名称（仅 apkg，默认: ActiveVocab）
   --tts <provider>     TTS 提供商：google, youdao, bing
@@ -63,7 +88,9 @@ npm run apkg -- --in input.csv --out vocab.apkg --deck "我的词汇" --tts youd
   --help               显示帮助信息
 ```
 
-## CSV 字段说明
+## 输入格式说明
+
+### CSV/TSV 字段
 
 | 字段 | 必需 | 说明 |
 |------|------|------|
@@ -142,18 +169,28 @@ anki/
 ├── src/
 │   ├── cli.ts           # 命令行入口
 │   ├── csv.ts           # CSV/TSV 读写
+│   ├── pdfParser.ts     # PDF 词汇表解析
+│   ├── xlsxParser.ts    # XLSX 词汇表解析
 │   ├── normalize.ts     # 文本归一化
 │   ├── audio.ts         # TTS URL 生成
 │   └── anki/
 │       ├── noteType.ts  # Anki 模板定义
 │       └── exportApkg.ts # APKG 导出
-├── input.csv            # 示例输入
+├── input.csv            # 示例输入（或 input.xlsx / input.pdf）
 ├── package.json
 ├── tsconfig.json
 └── README.md
 ```
 
 ## 常见问题
+
+### Q: AnkiDroid 输入错误拼写按回车仍会翻卡？
+
+A: 本模板使用**自定义输入框**（非 Anki 原生 type answer），输入与校验均由卡片内 JavaScript 控制，无需额外设置。若仍有问题，可尝试开启 AnkiDroid **设置 → 高级 → Type answer into the card**。
+
+### Q: 移动端键盘不自动弹出？
+
+A: 已添加 `data-focus`、`autofocus` 及 AnkiDroid 的 `name="typed"` 支持。若仍不弹出，请点击输入框唤起键盘（部分 AnkiDroid 版本存在已知限制）。
 
 ### Q: 音频无法播放？
 
@@ -170,6 +207,10 @@ A: 在 EN 字段中用分号分隔，如：`color;colour`
 A: 
 - TSV 方式：重新导入时选择"更新已存在的笔记"
 - APKG 方式：保持 ID 字段不变，Anki 会自动更新
+
+### Q: XLSX / PDF 支持哪些格式？
+
+A: 支持「单词 | 释义 | 例句」三列表格格式。单词列可含音标 `[IPA]`（如 `apartment [ə'pɑːrtmənt]`），释义列格式为 `n./v./adj. 中文释义`，例句列为英文例句 + 中文翻译。推荐使用 XLSX 格式，解析更稳定；若 PDF 解析失败，可先导出为 XLSX 再使用。
 
 ## License
 

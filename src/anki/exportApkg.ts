@@ -1,9 +1,9 @@
 /**
  * APKG 导出工具
- * 使用 SQLite 创建 Anki 数据库并打包为 .apkg
+ * 使用 sql.js（纯 JS SQLite）创建 Anki 数据库并打包为 .apkg
  */
 
-import Database from 'better-sqlite3';
+import initSqlJs from 'sql.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import archiver from 'archiver';
@@ -22,20 +22,16 @@ const generateId = (() => {
 /**
  * 创建 Anki collection.anki2 数据库
  */
-const createAnkiDatabase = (
+const createAnkiDatabase = async (
   dbPath: string,
   deckName: string,
   notes: NoteRecord[]
-): void => {
-  // 删除已存在的数据库
-  if (fs.existsSync(dbPath)) {
-    fs.unlinkSync(dbPath);
-  }
-
-  const db = new Database(dbPath);
+): Promise<void> => {
+  const SQL = await initSqlJs();
+  const db = new SQL.Database();
 
   // 创建表结构（Anki 2.1 schema）
-  db.exec(`
+  db.run(`
     CREATE TABLE IF NOT EXISTS col (
       id INTEGER PRIMARY KEY,
       crt INTEGER NOT NULL,
@@ -247,37 +243,25 @@ const createAnkiDatabase = (
   };
 
   // 插入 col 记录
-  const insertCol = db.prepare(`
-    INSERT INTO col (id, crt, mod, scm, ver, dty, usn, ls, conf, models, decks, dconf, tags)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  insertCol.run(
-    1,
-    now,
-    now * 1000,
-    now * 1000,
-    11, // schema version
-    0,
-    0,
-    0,
-    JSON.stringify(conf),
-    JSON.stringify(models),
-    JSON.stringify(decks),
-    JSON.stringify(dconf),
-    '{}'
+  db.run(
+    `INSERT INTO col (id, crt, mod, scm, ver, dty, usn, ls, conf, models, decks, dconf, tags)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      1,
+      now,
+      now * 1000,
+      now * 1000,
+      11, // schema version
+      0,
+      0,
+      0,
+      JSON.stringify(conf),
+      JSON.stringify(models),
+      JSON.stringify(decks),
+      JSON.stringify(dconf),
+      '{}',
+    ]
   );
-
-  // 插入笔记和卡片
-  const insertNote = db.prepare(`
-    INSERT INTO notes (id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const insertCard = db.prepare(`
-    INSERT INTO cards (id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
 
   // 简单的 checksum 计算
   const checksum = (s: string): number => {
@@ -299,60 +283,73 @@ const createAnkiDatabase = (
     return guid;
   };
 
-  const transaction = db.transaction(() => {
-    let dueCounter = 0;
+  db.run('BEGIN TRANSACTION');
 
-    for (const note of notes) {
-      const noteId = generateId();
-      const cardId = generateId();
+  let dueCounter = 0;
+  const insertNote = db.prepare(
+    `INSERT INTO notes (id, guid, mid, mod, usn, tags, flds, sfld, csum, flags, data)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const insertCard = db.prepare(
+    `INSERT INTO cards (id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps, lapses, left, odue, odid, flags, data)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
 
-      // 字段值（用 0x1f 分隔）
-      const fieldValues = FIELDS.map(f => note[f as keyof NoteRecord] || '').join('\x1f');
+  for (const note of notes) {
+    const noteId = generateId();
+    const cardId = generateId();
 
-      // 排序字段（CN）
-      const sortField = note.CN;
+    // 字段值（用 0x1f 分隔）
+    const fieldValues = FIELDS.map(f => note[f as keyof NoteRecord] || '').join('\x1f');
 
-      // 标签
-      const tags = note.Tags ? ` ${note.Tags} ` : '';
+    // 排序字段（CN）
+    const sortField = note.CN;
 
-      insertNote.run(
-        noteId,
-        generateGuid(),
-        modelId,
-        now,
-        -1,
-        tags,
-        fieldValues,
-        sortField,
-        checksum(sortField),
-        0,
-        ''
-      );
+    // 标签
+    const tags = note.Tags ? ` ${note.Tags} ` : '';
 
-      insertCard.run(
-        cardId,
-        noteId,
-        deckId,
-        0,    // ord: 第一个模板
-        now,
-        -1,
-        0,    // type: new
-        0,    // queue: new
-        dueCounter++, // due
-        0,    // ivl
-        0,    // factor
-        0,    // reps
-        0,    // lapses
-        0,    // left
-        0,    // odue
-        0,    // odid
-        0,    // flags
-        ''    // data
-      );
-    }
-  });
+    insertNote.run([
+      noteId,
+      generateGuid(),
+      modelId,
+      now,
+      -1,
+      tags,
+      fieldValues,
+      sortField,
+      checksum(sortField),
+      0,
+      '',
+    ]);
 
-  transaction();
+    insertCard.run([
+      cardId,
+      noteId,
+      deckId,
+      0, // ord: 第一个模板
+      now,
+      -1,
+      0, // type: new
+      0, // queue: new
+      dueCounter++, // due
+      0, // ivl
+      0, // factor
+      0, // reps
+      0, // lapses
+      0, // left
+      0, // odue
+      0, // odid
+      0, // flags
+      '', // data
+    ]);
+  }
+
+  insertNote.free();
+  insertCard.free();
+  db.run('COMMIT');
+
+  const data = db.export();
+  fs.writeFileSync(dbPath, Buffer.from(data));
   db.close();
 };
 
@@ -403,7 +400,7 @@ export const exportApkg = async (
 
   try {
     // 创建数据库
-    createAnkiDatabase(dbPath, deckName, notes);
+    await createAnkiDatabase(dbPath, deckName, notes);
 
     // 打包为 apkg
     await createApkgArchive(dbPath, outputPath);

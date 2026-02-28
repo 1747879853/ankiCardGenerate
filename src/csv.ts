@@ -13,6 +13,7 @@ export interface NoteRecord {
   ID: string;
   CN: string;
   EN: string;
+  TypeAnswer: string;  // EN 第一个答案，用于 Anki 原生 type-in-answer（移动端键盘兼容）
   IPA: string;
   POS: string;
   AudioURL: string;
@@ -26,7 +27,7 @@ export interface NoteRecord {
  * TSV 字段顺序（固定）
  */
 export const TSV_FIELDS: (keyof NoteRecord)[] = [
-  'ID', 'CN', 'EN', 'IPA', 'POS', 'AudioURL', 'ExampleEN', 'ExampleCN', 'Hint', 'Tags'
+  'ID', 'CN', 'EN', 'TypeAnswer', 'IPA', 'POS', 'AudioURL', 'ExampleEN', 'ExampleCN', 'Hint', 'Tags'
 ];
 
 /**
@@ -90,10 +91,12 @@ export const transformToNotes = (
       audioUrl = ttsTemplate.replace('{text}', encodeURIComponent(firstEn));
     }
     
+    const typeAnswer = en.split(';')[0].trim();
     return {
       ID: id,
       CN: cn,
       EN: en,
+      TypeAnswer: typeAnswer,
       IPA: ipa,
       POS: pos,
       AudioURL: audioUrl,
