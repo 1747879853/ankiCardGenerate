@@ -42,7 +42,8 @@ async function extractPdfTables(filePath: string): Promise<string[][] | null> {
 }
 
 function isValidEntry(en: string, cn: string): boolean {
-  return /^[a-zA-Z\-']+$/.test(en?.trim() || '') && /[\u4e00-\u9fff]/.test(cn || '');
+  const word = en?.trim() || '';
+  return word.length >= 3 && /^[a-zA-Z\-']+$/.test(word) && /[\u4e00-\u9fff]/.test(cn || '');
 }
 
 function stripExampleFromMeaning(

@@ -7,12 +7,16 @@
  *   npm run apkg -- --in input.csv --out deck.apkg --deck "ActiveVocab"
  */
 
-import { readCsv, transformToNotes, writeTsv } from './csv.js';
+import { createRequire } from 'module';
+import { readCsv, transformToNotes, writeTsv, loadExclusionSet, filterByExclusion } from './csv.js';
 import { readPdf } from './pdfParser.js';
 import { readXlsx } from './xlsxParser.js';
 import { exportApkg } from './anki/exportApkg.js';
 import { TTS_TEMPLATES, getAvailableTemplates } from './audio.js';
 import type { TtsProvider } from './audio.js';
+
+const require = createRequire(import.meta.url);
+const XLSX = require('xlsx');
 
 /**
  * 解析命令行参数
@@ -45,17 +49,20 @@ const showHelp = (): void => {
 Anki 中文→英文卡片生成器
 
 命令：
-  gen   生成 TSV 文件（用于 Anki 导入）
-  apkg  生成 APKG 文件（可直接双击导入）
+  gen       生成 TSV 文件（用于 Anki 导入）
+  apkg      生成 APKG 文件（可直接双击导入）
+  pdf2xlsx  将 PDF 词汇表转为 Excel 文件
 
 用法：
   npm run gen -- --in <input.csv> --out <output.tsv> [选项]
   npm run apkg -- --in <input.csv> --out <deck.apkg> [选项]
+  npm run pdf2xlsx -- [--in input.pdf] [--out output.xlsx]
 
 选项：
   --in <file>        输入文件路径（CSV/TSV、XLSX 或 PDF，必需）
   --out <file>       输出文件路径（必需）
   --deck <name>      牌组名称（仅 apkg，默认: ActiveVocab）
+  --exclude <file>   排除列表：已转换的词汇将跳过，支持 单词1,单词2 或每行一词（仅 apkg）
   --tts <provider>   TTS 提供商（如果 CSV 没有 AudioURL 列）
   --ttsTemplate <url>  自定义 TTS URL 模板（包含 {text} 占位符）
   --help             显示此帮助信息
@@ -71,7 +78,46 @@ ${getAvailableTemplates()}
 示例：
   npm run gen -- --in words.csv --out output.tsv --tts youdao
   npm run apkg -- --in input.xlsx --out vocab.apkg --deck "我的词汇" --tts youdao
+  npm run apkg -- --in input.xlsx --out vocab.apkg --exclude converted.csv --tts youdao
+  npm run pdf2xlsx
+  npm run pdf2xlsx -- --in input.pdf --out output.xlsx
 `);
+};
+
+/**
+ * 主函数
+ */
+/**
+ * 将解析出的记录写入 XLSX 文件
+ */
+/** 匹配 PDF 页码标记，如 "Page 1 --" */
+const PAGE_MARKER_RE = /^Page\s+\d+\s*[-–—]{1,2}/i;
+
+const writeXlsx = (records: Record<string, string>[], outputPath: string): void => {
+  const headers = ['EN', 'CN', 'IPA', 'POS', 'ExampleEN', 'ExampleCN'];
+  const rows = records.map(r =>
+    headers.map(h => {
+      const val = r[h] ?? '';
+      // Strip stray page markers from example fields
+      if ((h === 'ExampleEN' || h === 'ExampleCN') && PAGE_MARKER_RE.test(val)) return '';
+      return val;
+    })
+  );
+  const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+
+  // 设置列宽
+  worksheet['!cols'] = [
+    { wch: 20 },  // EN
+    { wch: 30 },  // CN
+    { wch: 20 },  // IPA
+    { wch: 8  },  // POS
+    { wch: 50 },  // ExampleEN
+    { wch: 50 },  // ExampleCN
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Vocabulary');
+  XLSX.writeFile(workbook, outputPath);
 };
 
 /**
@@ -87,8 +133,24 @@ const main = async (): Promise<void> => {
   
   const command = args[0];
   const options = parseArgs(args.slice(1));
+
+  // pdf2xlsx 命令：--in/--out 均有默认值，单独处理
+  if (command === 'pdf2xlsx') {
+    const inputPath = options.in || 'input.pdf';
+    const outputPath = options.out || 'output.xlsx';
+    try {
+      console.log(`正在解析 ${inputPath} …`);
+      const records = await readPdf(inputPath);
+      writeXlsx(records, outputPath);
+      console.log(`✓ 成功写入 ${records.length} 条词条到 ${outputPath}`);
+    } catch (error) {
+      console.error('错误：', error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+    return;
+  }
   
-  // 验证必需参数
+  // 其他命令需要 --in / --out
   if (!options.in) {
     console.error('错误：缺少输入文件参数 --in');
     process.exit(1);
@@ -141,7 +203,16 @@ const main = async (): Promise<void> => {
 
       case 'apkg': {
         const deckName = options.deck || 'ActiveVocab';
-        const rows = await loadRows();
+        let rows = await loadRows();
+        if (options.exclude) {
+          const exclusionSet = loadExclusionSet(options.exclude);
+          const before = rows.length;
+          rows = filterByExclusion(rows, exclusionSet);
+          const skipped = before - rows.length;
+          if (skipped > 0) {
+            console.log(`跳过 ${skipped} 条已转换词汇（来自 ${options.exclude}）`);
+          }
+        }
         const notes = transformToNotes(rows, ttsTemplate);
         await exportApkg(notes, options.out, deckName);
         console.log(`✓ 成功生成 ${notes.length} 张卡片到 ${options.out}`);
@@ -151,7 +222,7 @@ const main = async (): Promise<void> => {
       
       default:
         console.error(`错误：未知命令 "${command}"`);
-        console.log('可用命令：gen, apkg');
+        console.log('可用命令：gen, apkg, pdf2xlsx');
         process.exit(1);
     }
   } catch (error) {

@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "gen": "tsx src/cli.ts gen",
-    "apkg": "tsx src/cli.ts apkg"
+    "apkg": "tsx src/cli.ts apkg",
+    "pdf2xlsx": "tsx src/cli.ts pdf2xlsx"
   },
   "dependencies": {
     "archiver": "^6.0.1",

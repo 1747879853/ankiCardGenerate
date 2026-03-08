@@ -54,6 +54,44 @@ export const readCsv = (inputPath: string): Record<string, string>[] => {
 };
 
 /**
+ * 从排除文件加载已转换词汇集合（用于跳过已处理的词条）
+ * 支持格式：
+ *   - 纯单词列表：abandon,accomplish,accurate 或每行一个单词
+ *   - 带 EN/en/英文/word/单词 列的 CSV
+ * @param csvPath 排除文件路径（CSV 或纯单词列表）
+ * @returns 英文词汇集合（小写，用于匹配）
+ */
+export const loadExclusionSet = (csvPath: string): Set<string> => {
+  const content = fs.readFileSync(csvPath, 'utf-8').replace(/\r\n/g, '\n');
+  const set = new Set<string>();
+
+  // 纯单词列表：按逗号、换行分割，提取英文词
+  const addWord = (token: string) => {
+    const w = token.split(';')[0].trim().toLowerCase();
+    if (w && /^[a-zA-Z\-' ]+$/.test(w) && w.length >= 2) set.add(w);
+  };
+  const tokens = content.split(/[,\n]+/).map(s => s.trim()).filter(Boolean);
+  for (const t of tokens) addWord(t);
+
+  return set;
+};
+
+/**
+ * 根据排除集合过滤原始记录，跳过已转换的词汇
+ */
+export const filterByExclusion = (
+  rows: Record<string, string>[],
+  exclusionSet: Set<string>
+): Record<string, string>[] => {
+  if (exclusionSet.size === 0) return rows;
+  return rows.filter(row => {
+    const en = row.EN || row.en || row['英文'] || '';
+    const firstEn = en.split(';')[0].trim().toLowerCase();
+    return !firstEn || !exclusionSet.has(firstEn);
+  });
+};
+
+/**
  * 将原始 CSV 记录转换为标准 NoteRecord
  * @param rows 原始记录
  * @param ttsTemplate 可选的 TTS URL 模板

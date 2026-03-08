@@ -69,8 +69,11 @@ export function parseMeaningColumn(cell: string): { pos: string; cn: string } {
 /**
  * 从例句列解析：提取英文例句和中文翻译
  */
+/** 匹配 PDF 页码标记，如 "Page 1 --" / "Page 12 --"（支持 en-dash / em-dash）*/
+const PAGE_MARKER_RE = /^Page\s+\d+\s*[-–—]{1,2}/i;
+
 export function parseExampleColumn(cell: string): { exampleEN: string; exampleCN: string } {
-  const lines = cell.split(/\n/).map(s => s.trim()).filter(Boolean);
+  const lines = cell.split(/\n/).map(s => s.trim()).filter(l => Boolean(l) && !PAGE_MARKER_RE.test(l));
   const enLines: string[] = [];
   const cnLines: string[] = [];
 
@@ -97,14 +100,20 @@ export function parseExampleColumn(cell: string): { exampleEN: string; exampleCN
   };
 }
 
+/** 匹配 PDF 页眉 / 分节标题，如 "17 -- 墨墨背单词 已选单词 单词 释义 例句" */
+const SECTION_BANNER_RE = /墨墨|已选单词|^\d+\s*--\s*\S/;
+
 function isHeaderRow(row: string[]): boolean {
+  // 任何一列包含分节 banner 即视为标题行
+  if (row.some(cell => SECTION_BANNER_RE.test(cell))) return true;
   const c0 = (row[0] || '').toLowerCase();
   const c1 = (row[1] || '').toLowerCase();
   return c0 === '序号' || c0 === '单词' || c0 === 'word' || c1 === '单词' || c1 === 'word' || c0.includes('单词');
 }
 
 function isValidEntry(en: string, cn: string): boolean {
-  return /^[a-zA-Z\-']+$/.test(en?.trim() || '') && /[\u4e00-\u9fff]/.test(cn || '');
+  const word = en?.trim() || '';
+  return word.length >= 3 && /^[a-zA-Z\-' ]+$/.test(word) && /[\u4e00-\u9fff]/.test(cn || '');
 }
 
 function stripExampleFromMeaning(
@@ -160,13 +169,17 @@ export function parseTableToRecords(rows: string[][]): Record<string, string>[] 
 
     if (!isValidEntry(en, cn)) continue;
 
+    // 清理残留的页码标记（如 "Page 1 --"）
+    const exampleEN = PAGE_MARKER_RE.test(stripped.exampleEN) ? '' : stripped.exampleEN;
+    const exampleCN = PAGE_MARKER_RE.test(stripped.exampleCN) ? '' : stripped.exampleCN;
+
     records.push({
       EN: en,
       CN: cn,
       IPA: ipa,
       POS: '',
-      ExampleEN: stripped.exampleEN,
-      ExampleCN: stripped.exampleCN,
+      ExampleEN: exampleEN,
+      ExampleCN: exampleCN,
     });
   }
 
