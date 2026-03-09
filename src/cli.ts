@@ -63,6 +63,7 @@ Anki 中文→英文卡片生成器
   --out <file>       输出文件路径（必需）
   --deck <name>      牌组名称（仅 apkg，默认: ActiveVocab）
   --exclude <file>   排除列表：已转换的词汇将跳过，支持 单词1,单词2 或每行一词（仅 apkg）
+  --verbose          打印被跳过的具体单词/词组（需配合 --exclude 使用）
   --tts <provider>   TTS 提供商（如果 CSV 没有 AudioURL 列）
   --ttsTemplate <url>  自定义 TTS URL 模板（包含 {text} 占位符）
   --help             显示此帮助信息
@@ -203,14 +204,21 @@ const main = async (): Promise<void> => {
 
       case 'apkg': {
         const deckName = options.deck || 'ActiveVocab';
-        let rows = await loadRows();
+        const allRows = await loadRows();
+        let rows = allRows;
         if (options.exclude) {
           const exclusionSet = loadExclusionSet(options.exclude);
-          const before = rows.length;
-          rows = filterByExclusion(rows, exclusionSet);
-          const skipped = before - rows.length;
-          if (skipped > 0) {
-            console.log(`跳过 ${skipped} 条已转换词汇（来自 ${options.exclude}）`);
+          rows = filterByExclusion(allRows, exclusionSet);
+          const skippedRows = allRows.filter(r => !rows.includes(r));
+          if (skippedRows.length > 0) {
+            console.log(`跳过 ${skippedRows.length} 条已转换词汇（来自 ${options.exclude}）`);
+            if (options.verbose === 'true') {
+              skippedRows.forEach(r => {
+                const en = r.EN || r.en || r['英文'] || '';
+                const cn = r.CN || r.cn || r['中文'] || '';
+                console.log(`  - ${en}${cn ? `（${cn}）` : ''}`);
+              });
+            }
           }
         }
         const notes = transformToNotes(rows, ttsTemplate);
