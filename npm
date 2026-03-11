@@ -1,0 +1,9 @@
+
+> anki-cn2en-active-vocab@1.0.0 apkg
+> tsx src/cli.ts apkg --in input.xlsx --out vocab.apkg --deck 我的词汇 --tts youdao --exclude exclude.csvPS D:\code\ankiCardGenerate\ankiCardGenerate run apkg -- --in input.xlsx --out vocab.apkg --deck 我的词汇 --tts youdao --exclude exclude.csv
+
+跳过 1 条已转换词汇（来自 exclude.csv）
+✓ 成功导出 39 张卡片到 vocab.apkg
+✓ 成功生成 39 张卡片到 vocab.apkg
+
+下一步：双击生成的 .apkg 文件即可导入 Anki
