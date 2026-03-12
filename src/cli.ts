@@ -9,7 +9,6 @@
 
 import { createRequire } from 'module';
 import { readCsv, transformToNotes, writeTsv, loadExclusionSet, filterByExclusion } from './csv.js';
-import { readPdf } from './pdfParser.js';
 import { readXlsx } from './xlsxParser.js';
 import { exportApkg } from './anki/exportApkg.js';
 import { TTS_TEMPLATES, getAvailableTemplates } from './audio.js';
@@ -17,6 +16,15 @@ import type { TtsProvider } from './audio.js';
 
 const require = createRequire(import.meta.url);
 const XLSX = require('xlsx');
+type ReadPdfFn = (inputPath: string) => Promise<Record<string, string>[]>;
+let readPdfLoader: Promise<ReadPdfFn> | null = null;
+
+const getReadPdf = async (): Promise<ReadPdfFn> => {
+  if (!readPdfLoader) {
+    readPdfLoader = import('./pdfParser.js').then((mod) => mod.readPdf);
+  }
+  return readPdfLoader;
+};
 
 /**
  * 解析命令行参数
@@ -141,6 +149,7 @@ const main = async (): Promise<void> => {
     const outputPath = options.out || 'output.xlsx';
     try {
       console.log(`正在解析 ${inputPath} …`);
+      const readPdf = await getReadPdf();
       const records = await readPdf(inputPath);
       writeXlsx(records, outputPath);
       console.log(`✓ 成功写入 ${records.length} 条词条到 ${outputPath}`);
@@ -182,7 +191,10 @@ const main = async (): Promise<void> => {
   const isXlsx = ext === 'xlsx' || ext === 'xls';
 
   const loadRows = async (): Promise<Record<string, string>[]> => {
-    if (isPdf) return readPdf(options.in);
+    if (isPdf) {
+      const readPdf = await getReadPdf();
+      return readPdf(options.in);
+    }
     if (isXlsx) return readXlsx(options.in);
     return readCsv(options.in);
   };
